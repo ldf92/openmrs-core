@@ -49,5 +49,33 @@ public class SchedulerUtilTest {
 		assertEquals(startTime.getTime(), nextTime);
 		
 	}
-	
+
+	/**
+	 * Tests whether the scheduler is handing out the correct execution times for tasks.
+	 *
+	 * @see SchedulerUtil#getNextExecution(TaskDefinition)
+	 */
+	@Test
+	@Verifies(value = "should get first time if first time is in the futhure and non repeatable", method = "getNextExecution" + "(TaskDefinition)")
+	public void getNextExecution_shouldGetFirstTimeIfFirstTimeIsInTheFuthureAndNonRepeatable() throws Exception {
+
+		Date currentTime = new Date();
+
+		// Represents the start time of the task (right now)
+		Calendar startTime = Calendar.getInstance();
+		startTime.add(Calendar.MINUTE, 10);
+		// Non repeat
+		Long repeatInterval = new Long(0);
+
+		// Create the new task
+		TaskDefinition taskDefinition = new TaskDefinition();
+		taskDefinition.setStartTime(startTime.getTime());
+		taskDefinition.setRepeatInterval(repeatInterval);
+
+		// Get the next scheduled execution time for this task
+		Date nextTime = SchedulerUtil.getNextExecution(taskDefinition);
+
+		// Assert that the next execution time is equal to startTime + 4 minutes
+		assertEquals(startTime.getTime(), nextTime);
+	}
 }
