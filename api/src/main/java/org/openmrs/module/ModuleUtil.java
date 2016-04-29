@@ -305,8 +305,8 @@ public class ModuleUtil {
 						return true;
 					}
 				} else {
-					if (compareVersion(version, range) < 0) {
-						log.debug("Version " + version + " is below " + range);
+					if ( ! (compareVersion(version, range) == 0)) {
+						log.error("Version " + version + " does not match " + range);
 					} else {
 						return true;
 					}
