@@ -180,6 +180,9 @@ public class ModuleFactory {
 	 * Attempt to load the given files as OpenMRS modules
 	 * 
 	 * @param modulesToLoad the list of files to try and load
+	 * @should not crash when file is not found or broken
+	 * @should setup requirement mappings for every module
+	 * @should not start the loaded modules
 	 */
 	public static void loadModules(List<File> modulesToLoad) {
 		// loop over the modules and load all the modules that we can
@@ -223,38 +226,46 @@ public class ModuleFactory {
 		// loop over and try starting each of the loaded modules
 		if (getLoadedModules().size() > 0) {
 			
+			List<Module> modules = getModulesThatShouldStart();
+			
 			try {
-				List<Module> modules = getModulesThatShouldStart();
-				
 				modules = getModulesInStartupOrder(modules);
-				
-				// try and start the modules that should be started
-				for (Module mod : modules) {
-					
-					if (mod.isStarted()) {
-						continue; // skip over modules that are already started
-					}
-										
-					try {
-						if (log.isDebugEnabled()) {
-							log.debug("starting module: " + mod.getModuleId());
-						}
-						startModule(mod);
-					}
-					catch (Exception e) {
-						log.error("Error while starting module: " + mod.getName(), e);
-						mod.setStartupErrorMessage("Error while starting module", e);
-						notifySuperUsersAboutModuleFailure(mod);
-					}
-				}
-				
 			}
-			catch (CycleException e) {
-				String message = getCyclicDependenciesMessage();
-				log.error(message);
-				notifySuperUsersAboutCyclicDependencies();
+			catch (CycleException ex) {
+				String message = getCyclicDependenciesMessage(ex.getMessage());
+				log.error(message, ex);
+				notifySuperUsersAboutCyclicDependencies(ex);
+				modules = (List<Module>)ex.getExtraData();
 			}
 			
+			// try and start the modules that should be started
+			for (Module mod : modules) {
+				
+				if (mod.isStarted()) {
+					continue; // skip over modules that are already started
+				}
+				
+				// Skip module if required ones are not started
+				if (!requiredModulesStarted(mod)) {
+					String message = getFailedToStartModuleMessage(mod);
+					log.error(message);
+					mod.setStartupErrorMessage(message);
+					notifySuperUsersAboutModuleFailure(mod);
+					continue;
+				}
+				
+				try {
+					if (log.isDebugEnabled()) {
+						log.debug("starting module: " + mod.getModuleId());
+					}
+					startModule(mod);
+				}
+				catch (Exception e) {
+					log.error("Error while starting module: " + mod.getName(), e);
+					mod.setStartupErrorMessage("Error while starting module", e);
+					notifySuperUsersAboutModuleFailure(mod);
+				}
+			}		
 		}
 	}
 	
@@ -358,10 +369,10 @@ public class ModuleFactory {
 	/**
 	 * Send an Alert to all super users that modules did not start due to cyclic dependencies
 	 */
-	private static void notifySuperUsersAboutCyclicDependencies() {
+	private static void notifySuperUsersAboutCyclicDependencies(Exception ex) {
 		try {
 			Context.addProxyPrivilege(PrivilegeConstants.MANAGE_ALERTS);
-			Context.getAlertService().notifySuperUsers("Module.error.cyclicDependencies", null);
+			Context.getAlertService().notifySuperUsers("Module.error.cyclicDependencies", ex, ex.getMessage());
 		}
 		catch (Exception e) {
 			log.error("Unable to send an alert to the super users", e);
@@ -891,8 +902,8 @@ public class ModuleFactory {
 	 * 
 	 * @return the message text.
 	 */
-	private static String getCyclicDependenciesMessage() {
-		return Context.getMessageSourceService().getMessage("Module.error.cyclicDependencies", null, Context.getLocale());
+	private static String getCyclicDependenciesMessage(String message) {
+		return Context.getMessageSourceService().getMessage("Module.error.cyclicDependencies", new Object[]{ message }, Context.getLocale());
 	}
 	
 	/**
@@ -1268,7 +1279,6 @@ public class ModuleFactory {
 	
 	/**
 	 * Removes module from module repository
-	 * 
 	 * @param mod module to unload
 	 */
 	public static void unloadModule(Module mod) {
